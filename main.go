@@ -2,9 +2,10 @@ package main
 
 import (
 	"errors"
-	"github.com/gin-gonic/gin"
 	"net/http"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 type dnsRecord struct {
@@ -20,6 +21,10 @@ type dnsRecord struct {
 var rc = map[string]dnsRecord{
 	// just for testing & demonstration
 	"domain": {time.Now(), "domain", "subName", "name", "type", "192.168.1.1", 3600},
+}
+
+func getPing(context *gin.Context) {
+	context.IndentedJSON(http.StatusOK, "pong")
 }
 
 func getRecords(context *gin.Context) {
@@ -57,8 +62,8 @@ func addRecord(context *gin.Context) {
 
 func main() {
 	router := gin.Default()
+	router.GET("/ping", getPing)
 	router.GET("/:domainName", getRecords)
 	router.POST("/:domainName", addRecord)
-	router.Run("localhost:9090")
-
+	router.Run(":9090")
 }
