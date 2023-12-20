@@ -18,6 +18,7 @@ type dnsRecord struct {
 }
 
 var rc = map[string]dnsRecord{
+	// just for testing & demonstration
 	"domain": {time.Now(), "domain", "subName", "name", "type", "192.168.1.1", 3600},
 }
 
