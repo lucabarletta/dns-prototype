@@ -37,7 +37,7 @@ curl --request GET \
 }
 ```
 
-This dns entry is hardcoded and always available for debugging
+This dns entry is hardcoded and available after startup
 
 ---
 
