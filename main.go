@@ -31,6 +31,7 @@ func getRecords(context *gin.Context) {
 	}
 	context.IndentedJSON(http.StatusOK, record)
 }
+
 func getRecordsByDomainName(domainName string) (*dnsRecord, error) {
 	if rec, found := rc[domainName]; found {
 		return &rec, nil
