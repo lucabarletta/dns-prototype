@@ -21,19 +21,12 @@
 #### GET example
 
 ```curl
-curl --request GET \
-  --url http://localhost:9090/domain
+curl --location 'http://localhost:9090/domain.i2p'
 ```
 
 ```json
 {
-    "created": "2023-12-20T17:03:57.4278276+01:00",
-    "domain": "domain",
-    "subName": "subName",
-    "name": "name",
-    "type": "type",
-    "record": "192.168.1.1",
-    "ttl": 3600
+  // todo: add response
 }
 ```
 
@@ -44,28 +37,13 @@ This dns entry is hardcoded and available after startup
 #### PUT example
 
 ```curl
-curl --request PUT \
-  --url http://localhost:9090/test123 \
-  --header 'Content-Type: application/json' \
-  --data '{
-  "domain": "domain",
-  "subName": "subName",
-  "name": "name",
-  "type": "type",
-  "record": "192.168.1.1",
-  "ttl": 3600
-}'
+curl --location \
+  --request PUT 'http://localhost:9090/domain.i2p/m6elnkiizogiz5wq4perd7aslir5rdu7jmtwxlxua5aofa43zyva'
 ```
 
 ```json
 {
-    "created": "2023-12-20T17:04:35.202372+01:00",
-    "domain": "domain",
-    "subName": "subName",
-    "name": "name",
-    "type": "type",
-    "record": "192.168.1.1",
-    "ttl": 3600
+    "ident": "543E2jGQ"
 }
 ```
 

@@ -54,6 +54,9 @@ func getRecords(context *gin.Context) {
 	}
 	defer res.Body.Close()
 
+	fmt.Println("The status code we got is:", res.StatusCode)
+
+
 	resBody, err := io.ReadAll(res.Body)
 	if err != nil {
 		fmt.Printf("error reading response body: %s\n", err)
@@ -61,7 +64,7 @@ func getRecords(context *gin.Context) {
 		return
 	}
 
-	context.IndentedJSON(http.StatusOK, resBody)
+	context.IndentedJSON(res.StatusCode, resBody)
 }
 
 func addRecord(context *gin.Context) {
@@ -99,7 +102,7 @@ func addRecord(context *gin.Context) {
 	}
 	defer res.Body.Close()
 
-	fmt.Printf("%d\n", res.Response.StatusCode)
+//	fmt.Printf("%d\n", res.Response.StatusCode)
 
 	resBody, err := io.ReadAll(res.Body)
 	if err != nil {
