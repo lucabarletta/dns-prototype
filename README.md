@@ -41,10 +41,10 @@ This dns entry is hardcoded and available after startup
 
 ---
 
-#### POST example
+#### PUT example
 
 ```curl
-curl --request POST \
+curl --request PUT \
   --url http://localhost:9090/test123 \
   --header 'Content-Type: application/json' \
   --data '{

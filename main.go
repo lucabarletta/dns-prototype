@@ -1,52 +1,36 @@
 package main
 
 import (
-	"errors"
-	"github.com/gin-gonic/gin"
-	"github.com/gin-gonic/gin/binding"
-	"github.com/go-playground/validator/v10"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"regexp"
-	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
-var ipRegexPattern = regexp.MustCompile(`^(\d{1,3}\.){3}\d{1,3}$`)
-var domainRegexPattern = regexp.MustCompile(`^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,6}$`)
+var divaEndpoint = os.Getenv(`DIVA_ENDPOINT`)
+
+var b32AddressRegexPattern = regexp.MustCompile(`^[a-z0-9]{52}$`)
+var domainRegexPattern = regexp.MustCompile(`^[a-z0-9-_]{3,64}\.i2p$`)
 
 type dnsRecord struct {
-	Created time.Time `json:"created"`
-	Domain  string    `json:"domain" binding:"required,domainNameValidator"`
-	SubName string    `json:"subName" binding:"required"`
-	Name    string    `json:"name" binding:"required"`
-	Type    string    `json:"type" binding:"required"`
-	Records []string  `json:"records" binding:"required,recordArrayValidator"`
-	Ttl     int       `json:"ttl" binding:"required"`
+	Sequence   int    `json:"seq" binding:"required"`
+	Command    string `json:"command" binding:"required"`
+	NameServer string `json:"ns" binding:"required"`
+	Data       string `json:"d" binding:"required"`
 }
 
-func recordArrayValidator(input validator.FieldLevel) bool {
-	recordList := input.Field().Interface().([]string)
-	if len(recordList) < 1 {
-		return false
-	}
-	for _, ip := range recordList {
-		if !ipRegexPattern.MatchString(ip) {
-			return false
-		}
-	}
-	return true
+func b32AddressValidator(input string) bool {
+	return b32AddressRegexPattern.MatchString(input)
 }
 
-func domainNameValidator(input validator.FieldLevel) bool {
-	domainName := input.Field().Interface().(string)
-	if !domainRegexPattern.MatchString(domainName) {
-		return false
-	}
-	return true
-}
-
-var rc = map[string]dnsRecord{
-	// just for testing & demonstration
-	"domain": {Created: time.Now(), Domain: "domain", SubName: "subName", Name: "name", Type: "type", Records: []string{"192.168.1.1", "192.168.1.2"}, Ttl: 3600},
+func domainNameValidator(input string) bool {
+	return domainRegexPattern.MatchString(input)
 }
 
 func getPing(context *gin.Context) {
@@ -55,59 +39,84 @@ func getPing(context *gin.Context) {
 
 func getRecords(context *gin.Context) {
 	domainName := context.Param("domainName")
-	record, err := getRecordsByDomainName(domainName)
-	if err != nil {
-		context.IndentedJSON(http.StatusNotFound, gin.H{"message": "not found"})
+
+	if !domainNameValidator(domainName) {
+		context.IndentedJSON(http.StatusBadRequest, gin.H{"message": "domain format invalid"})
 		return
 	}
-	context.IndentedJSON(http.StatusOK, record)
-}
 
-func getRecordsByDomainName(domainName string) (*dnsRecord, error) {
-	if rec, found := rc[domainName]; found {
-		return &rec, nil
-	} else {
-		return nil, errors.New("not found")
+	requestURL := fmt.Sprintf("%s/state/decision:I2PDNS:%s", divaEndpoint, domainName)
+	resp, err := http.Get(requestURL)
+	if err != nil {
+		fmt.Printf("error making http request: %s\n", err)
+		context.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "could not verify with diva endpoint"})
+		return
 	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Printf("error reading response body: %s\n", err)
+		context.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "could not verify with diva endpoint"})
+		return
+	}
+
+	context.IndentedJSON(http.StatusOK, respBody)
 }
 
 func addRecord(context *gin.Context) {
-	var dto dnsRecord
 	domainName := context.Param("domainName")
+	b32Address := context.Param("b32Address")
 
-	if err := context.ShouldBindJSON(&dto); err != nil {
-		println(err.Error())
-		context.IndentedJSON(http.StatusBadRequest, gin.H{"message": "given type could not be parsed"})
+	if !domainNameValidator(domainName) {
+		context.IndentedJSON(http.StatusBadRequest, gin.H{"message": "domain format invalid"})
+		return
+	}
+	if !b32AddressValidator(b32Address) {
+		context.IndentedJSON(http.StatusBadRequest, gin.H{"message": "b32 address format invalid"})
 		return
 	}
 
-	dto.Created = time.Now()
-	rc[domainName] = dto
-	context.IndentedJSON(http.StatusCreated, dto)
-}
+	payload := dnsRecord{
+		Sequence:   1,
+		Command:    "data",
+		NameServer: fmt.Sprintf("I2PDNS:%s", domainName),
+		Data:       fmt.Sprintf("%s=%s", domainName, b32Address),
+	}
 
-func registerValidator() {
-	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
-		err := v.RegisterValidation("recordArrayValidator", recordArrayValidator)
-		if err != nil {
-			return
-		}
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		context.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "could not convert payload to json"})
+		return
 	}
-	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
-		err := v.RegisterValidation("domainNameValidator", domainNameValidator)
-		if err != nil {
-			return
-		}
+
+	requestURL := fmt.Sprintf("%s/transaction/", divaEndpoint)
+	res, err := http.NewRequest(http.MethodPut, requestURL, bytes.NewBuffer(payloadJSON))
+	if err != nil {
+		fmt.Printf("error making http request: %s\n", err)
+		context.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "could not verify with diva endpoint"})
+		return
 	}
+
+	if res.Response.StatusCode != 200 {
+		context.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "could not add record to diva network"})
+		return
+	}
+
+	context.IndentedJSON(http.StatusCreated, payload)
 }
 
 func main() {
+	godotenv.Load()
+
 	router := gin.Default()
-	registerValidator()
+
 	router.GET("/ping", getPing)
 	router.GET("/:domainName", getRecords)
-	router.PUT("/:domainName", addRecord)
+	router.PUT("/:domainName/:b32Address", addRecord)
+
 	err := router.Run(":9090")
+
 	if err != nil {
 		return
 	}
