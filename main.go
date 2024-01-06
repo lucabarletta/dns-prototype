@@ -13,7 +13,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
-var divaEndpoint = os.Getenv(`DIVA_ENDPOINT`)
+var divaEndpoint string
 
 var b32AddressRegexPattern = regexp.MustCompile(`^[a-z0-9]{52}$`)
 var domainRegexPattern = regexp.MustCompile(`^[a-z0-9-_]{3,64}\.i2p$`)
@@ -46,22 +46,22 @@ func getRecords(context *gin.Context) {
 	}
 
 	requestURL := fmt.Sprintf("%s/state/decision:I2PDNS:%s", divaEndpoint, domainName)
-	resp, err := http.Get(requestURL)
+	res, err := http.Get(requestURL)
 	if err != nil {
 		fmt.Printf("error making http request: %s\n", err)
 		context.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "could not verify with diva endpoint"})
 		return
 	}
-	defer resp.Body.Close()
+	defer res.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	resBody, err := io.ReadAll(res.Body)
 	if err != nil {
 		fmt.Printf("error reading response body: %s\n", err)
 		context.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "could not verify with diva endpoint"})
 		return
 	}
 
-	context.IndentedJSON(http.StatusOK, respBody)
+	context.IndentedJSON(http.StatusOK, resBody)
 }
 
 func addRecord(context *gin.Context) {
@@ -97,17 +97,23 @@ func addRecord(context *gin.Context) {
 		context.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "could not verify with diva endpoint"})
 		return
 	}
+	defer res.Body.Close()
 
-	if res.Response.StatusCode != 200 {
-		context.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "could not add record to diva network"})
+	fmt.Printf("%d\n", res.Response.StatusCode)
+
+	resBody, err := io.ReadAll(res.Body)
+	if err != nil {
+		fmt.Printf("error reading response body: %s\n", err)
+		context.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "could not verify with diva endpoint"})
 		return
 	}
 
-	context.IndentedJSON(http.StatusCreated, payload)
+	context.IndentedJSON(http.StatusCreated, resBody)
 }
 
 func main() {
 	godotenv.Load()
+	divaEndpoint = os.Getenv(`DIVA_ENDPOINT`)
 
 	router := gin.Default()
 
