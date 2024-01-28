@@ -15,6 +15,8 @@ import (
 
 var divaEndpoint string
 
+var apiToken string
+
 var b32AddressRegexPattern = regexp.MustCompile(`^[a-z0-9]{52}$`)
 var domainRegexPattern = regexp.MustCompile(`^[a-z0-9-_]{3,64}\.i2p$`)
 
@@ -45,7 +47,7 @@ func getRecords(context *gin.Context) {
 		return
 	}
 
-	requestURL := fmt.Sprintf("%s/state/decision:I2PDNS:%s", divaEndpoint, domainName)
+	requestURL := fmt.Sprintf("%s/state/I2PDNS:%s", divaEndpoint, domainName)
 	res, err := http.Get(requestURL)
 	if err != nil {
 		fmt.Printf("error making http request: %s\n", err)
@@ -80,7 +82,9 @@ func addRecord(context *gin.Context) {
 		return
 	}
 
-	payload := dnsRecord{
+	refreshApiToken()
+
+	payload := dnsRecord {
 		Sequence:   1,
 		Command:    "data",
 		NameServer: fmt.Sprintf("I2PDNS:%s", domainName),
@@ -93,16 +97,28 @@ func addRecord(context *gin.Context) {
 		return
 	}
 
-	requestURL := fmt.Sprintf("%s/transaction/", divaEndpoint)
-	res, err := http.NewRequest(http.MethodPut, requestURL, bytes.NewBuffer(payloadJSON))
+	requestURL := fmt.Sprintf("%s/tx/", divaEndpoint)
+	req, err := http.NewRequest(http.MethodPut, requestURL, bytes.NewBuffer(payloadJSON))
 	if err != nil {
 		fmt.Printf("error making http request: %s\n", err)
 		context.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "could not verify with diva endpoint"})
 		return
 	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("diva-token-api", apiToken)
+
+	client := &http.Client{}
+    res, err := client.Do(req)
+    if err != nil {
+		fmt.Printf("error making http request: %s\n", err)
+		context.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "could not verify with diva endpoint"})
+		return
+    }
+
 	defer res.Body.Close()
 
-//	fmt.Printf("%d\n", res.Response.StatusCode)
+	fmt.Println("The status code we got is:", res.StatusCode)
 
 	resBody, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -112,6 +128,30 @@ func addRecord(context *gin.Context) {
 	}
 
 	context.IndentedJSON(http.StatusCreated, resBody)
+}
+
+type ApiToken struct {
+	Header	string `json:"header"`
+	Token	string `json:"token"`
+}
+
+func refreshApiToken() {
+	requestURL := fmt.Sprintf("%s/testnet/token", divaEndpoint)
+
+	res, err := http.Get(requestURL)
+	if err != nil {
+		fmt.Printf("error making http request: %s\n", err)
+		return
+	}
+	defer res.Body.Close()
+
+	var _apiToken ApiToken
+	err = json.NewDecoder(res.Body).Decode(&_apiToken)
+	if err != nil {
+		fmt.Printf("Error decoding JSON: %s\n", err)
+	}
+
+	apiToken = _apiToken.Token
 }
 
 func main() {
