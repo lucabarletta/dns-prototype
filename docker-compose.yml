@@ -5,3 +5,8 @@ services:
     build: .
     ports:
       - 9090:9090
+
+networks:
+  default:
+    name: network.testnet.local
+    external: true
